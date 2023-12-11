@@ -11,10 +11,10 @@ class UnoMongo {
         if(UnoMongo.clients[connectionName]){ throw Error('connection by the name',connectionName,'already exists')}
         const client=await Mongodb.MongoClient.connect(uri,options)
         UnoMongo.clients[connectionName]=client
-        UnoMongo.dbs[connectionName]=client.db
+        UnoMongo.dbs[connectionName]=client.db()
         if(connectionName==='default'){
             UnoMongo.client=client
-            UnoMongo.db=client.db
+            UnoMongo.db=UnoMongo.dbs[connectionName]
         }
         if (UnoMongo.onConnectHandlers[connectionName]) {
             for await (const handler of UnoMongo.onConnectHandlers[connectionName]) {
@@ -22,22 +22,50 @@ class UnoMongo {
             }
         }
         return client.db
-    }    
+    }
+    static disconnect(connectionName){
+        function disc(name){
+            if(UnoMongo.dbs[name]){
+                delete UnoMongo.dbs[name]
+                UnoMongo.clients[name].close()
+                if(name==='default'){
+                    UnoMongo.db=undefined
+                    UnoMongo.client=undefined
+                }
+            }
+        }
+        if(!connectionName)
+            Object.keys(UnoMongo.clients).forEach(name=>disc(name))
+        else
+            disc(connectionName)
+    }
 }
 
 module.exports.UnoMongo=UnoMongo
 
+function prototypeProperties(obj) {
+    var p = [];
+    for (; obj != null; obj = Object.getPrototypeOf(obj)) {
+        var op = Object.getOwnPropertyNames(obj);
+        for (var i=0; i<op.length; i++)
+            if (p.indexOf(op[i]) == -1)
+                 p.push(op[i]);
+    }
+    console.info("props",p)
+    return p;
+}
+
 class Collection {
-    static connectionName='default'
+    static _connectionName='default'
     static _collectionName
-    static createOptions
+    static _createOptions
     static _indexes
     static ObjectID=Mongodb.ObjectID
     static _initialDocs
 
     static load(objs) {
         if (this._initialDocs) this._initialDocs = this._initialDocs.concat(objs)
-        else if (!UnoMongo.dbs[this.connectionName]) this._initialDocs = objs
+        else if (!UnoMongo.dbs[this._connectionName]) this._initialDocs = objs
         else this._write_load(objs)
     }
     static async _write_load(objs) {
@@ -54,7 +82,7 @@ class Collection {
             console.info('_write_load updating for development')
             for await (const doc of objs) {
                 try {
-                const result = await UnoMongo.dbs.collection([this._collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
+                const result = await UnoMongo.dbs[this._connectionName].collection([this._collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
                 if (typeof result !== 'object' || result.length !== 1) {
                     console.error('_write_load result not ok', result, 'for', doc)
                     // don't throw errors here-  keep going
@@ -69,11 +97,11 @@ class Collection {
     static async onConnect(){
         // if there are creatOptions it must be done before db.collection(name) is ever called
         try {
-            if(this.createOptions){
-                const collections = await UnoMongo.dbs[this.connectionName].listCollections({ name: this._collectionName }).toArray()
+            if(this._createOptions){
+                const collections = await UnoMongo.dbs[this._connectionName].listCollections({ name: this._collectionName }).toArray()
                 if (!(collections && collections.length === 1)){
                     console.info('Collection.onConnect creating collection',this._collectionName)
-                    var result = await UnoMongo.dbs[this.connectionName].createCollection(this._collectionName, this.createOptions)
+                    var result = await UnoMongo.dbs[this._connectionName].createCollection(this._collectionName, this._createOptions)
                     if (!result) console.error('Collection.onConnect result failed')
                 }
             }
@@ -83,7 +111,19 @@ class Collection {
             throw err
         }
         // now that the db is open, apply all the properties of the collection to the prototype for this class for they are part of new Collection
-        this.collection=UnoMongo[this.connectionName].collection(this._collectionName)
+        const collection=UnoMongo.dbs[this._connectionName].collection(this._collectionName)
+        this.collection=collection
+
+        const keys=Object.getOwnPropertyNames(Collection.prototype)
+        .concat(Object.getOwnPropertyNames(collection)) // this line has to be there or Mongo throws 
+        // TypeError: Cannot read properties of undefined (reading 'namespace')
+
+        // this loop, plus the loop blow refering to the same error has to be there or we get
+        // TypeError: User.insertOne is not a function
+        for(const key of keys){
+            if(key!=='constructor')
+                Object.defineProperty(this,key,{get() {return this.collection[key]},enumerable: true, configurable: true})
+        }
         try {
             if(this._indexes && this._indexes.length)
             await this.collection.createIndexes(this._indexes)
@@ -95,10 +135,11 @@ class Collection {
         try {
             var count = await this.collection.count()
             console.info('Collection.init count', count)
-            if (!(this._initialDocs && (process.env.NODE_ENV !== 'production' || !count))) return ok()
-            // if development, or if production but nothing in the database
-            await this._write_load(this._initialDocs)
-            delete this._initialDocs
+            if (this._initialDocs && (process.env.NODE_ENV !== 'production' || !count)){
+                // if development, or if production but nothing in the database
+                await this._write_load(this._initialDocs)
+                delete this._initialDocs
+            }
 
         } catch (err) {
             console.error('Collection.createIndexes error:', err)
@@ -108,64 +149,17 @@ class Collection {
     static setCollectionProps(collectionName,connectionName='default',createOptions,indexes){
         // using 'this' rather than Collection because when Collection is extended 'this' refers to the new class
         this._collectionName=collectionName
-        this.connectionName=connectionName
-        this.createOptions=createOptions
+        this._connectionName=connectionName
+        this._createOptions=createOptions
         this._indexes=indexes
         if (UnoMongo.dbs[connectionName]) this.onConnect()
-        else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect)
-        else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect]
+        else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
+        else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
     }
-/*
-    get dbName(){return this.collection.dbName}
-    get collectionName(){return this.collection.collectionName}
-    get namespace(){return this.collection.namespace}
-    get fullNamespace(){return this.collection.fullNamespace}
-    get readConcern(){return this.collection.readConcern}
-    get readPreference(){return this.collection.readPreference}
-    get bsonOptions(){return this.collection.bsonOptions}
-    get writeConcern(){return this.collection.writeConcern}
-    get hint(){return this.collection.hint}
-    get insertOne(){return this.collection.insertOne}
-    get insertMany(){return this.collection.insertMany}
-    get bulkWrite(){return this.collection.bulkWrite}
-    get updateOne(){return this.collection.updateOne}
-    get replaceOne(){return this.collection.replaceOne}
-    get updateMany(){return this.collection.updateMany}
-    get deleteOne(){return this.collection.deleteOne}
-    get deleteMany(){return this.collection.deleteMany}
-    get rename(){return this.collection.rename}
-    get drop(){return this.collection.drop}
-    get findOne(){return this.collection.findOne}
-    get find(){return this.collection.find}
-    get options(){return this.collection.options}
-    get isCapped(){return this.collection.isCapped}
-    get createIndex(){return this.collection.createIndex}
-    get createIndexes(){return this.collection.createIndexes}
-    get dropIndex(){return this.collection.dropIndex}
-    get dropIndexes(){return this.collection.dropIndexes}
-    get listIndexes(){return this.collection.listIndexes}
-    get indexExists(){return this.collection.indexExists}
-    get indexInformation(){return this.collection.indexInformation}
-    get estimatedDocumentCount(){return this.collection.estimatedDocumentCount}
-    get countDocuments(){return this.collection.countDocuments}
-    get distinct(){return this.collection.distinct}
-    get indexes(){return this.collection.indexes}
-    get findOneAndDelete(){return this.collection.findOneAndDelete}
-    get findOneAndReplace(){return this.collection.findOneAndReplace}
-    get findOneAndUpdate(){return this.collection.findOneAndUpdate}
-    get aggregate(){return this.collection.aggregate}
-    get watch(){return this.collection.watch}
-    get initializeUnorderedBulkOp(){return this.collection.initializeUnorderedBulkOp}
-    get initializeOrderedBulkOp(){return this.collection.initializeOrderedBulkOp}
-    get count(){return this.collection.count}
-    get listSearchIndexes(){return this.collection.listSearchIndexes}
-    get createSearchIndex(){return this.collection.createSearchIndex}
-    get createSearchIndexes(){return this.collection.createSearchIndexes}
-    get dropSearchIndex(){return this.collection.dropSearchIndex}
-    get updateSearchIndex(){return this.collection.updateSearchIndex}
-    */
 }
 
+// this loop plus the loop above with the same error message has to be there or we get:
+// TypeError: User.insertOne is not a function
 const keys=Object.getOwnPropertyNames(Mongodb.Collection.prototype)
 for(const key of keys){
     if(key!=='constructor')
