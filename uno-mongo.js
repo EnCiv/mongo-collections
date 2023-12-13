@@ -55,21 +55,20 @@ function prototypeProperties(obj) {
 }
 
 class Collection {
-    static _connectionName='default'
-    static _collectionName
-    static _collectionOptions
-    static _collectionIndexes
+    static connectionName='default'
+    static collectionOptions
+    static collectionIndexes
     static ObjectID=Mongodb.ObjectID
-    static _initialDocs
+    static initialDocs
 
     static async onConnect(){
         // if there are creatOptions it must be done before db.collection(name) is ever called
         try {
-            if(this._collectionOptions){
-                const collections = await UnoMongo.dbs[this._connectionName].listCollections({ name: this._collectionName }).toArray()
+            if(this.collectionOptions){
+                const collections = await UnoMongo.dbs[this.connectionName].listCollections({ name: this.collectionName }).toArray()
                 if (!(collections && collections.length === 1)){
-                    console.info('Collection.onConnect creating collection',this._collectionName)
-                    var result = await UnoMongo.dbs[this._connectionName].createCollection(this._collectionName, this._collectionOptions)
+                    console.info('Collection.onConnect creating collection',this.collectionName)
+                    var result = await UnoMongo.dbs[this.connectionName].createCollection(this.collectionName, this.collectionOptions)
                     if (!result) console.error('Collection.onConnect result failed')
                 }
             }
@@ -79,7 +78,7 @@ class Collection {
             throw err
         }
         // now that the db is open, apply all the properties of the collection to the prototype for this class for they are part of new Collection
-        const collection=UnoMongo.dbs[this._connectionName].collection(this._collectionName)
+        const collection=UnoMongo.dbs[this.connectionName].collection(this.collectionName)
         this.collection=collection
 
         const keys=prototypeProperties(collection)
@@ -96,8 +95,8 @@ class Collection {
             // Object.defineProperty(this.prototype,key,{get() {return collection[key]},enumerable: true, configurable: true})
         }
         try {
-            if(this._collectionIndexes && this._collectionIndexes.length)
-            await this.collection.createIndexes(this._collectionIndexes)
+            if(this.collectionIndexes && this.collectionIndexes.length)
+            await this.collection.createIndexes(this.collectionIndexes)
         }
         catch (err) {
             console.error('createIndexes error:', err)
@@ -106,10 +105,10 @@ class Collection {
         try {
             var count = await this.collection.count()
             console.info('Collection.init count', count)
-            if (this._initialDocs && (process.env.NODE_ENV !== 'production' || !count)){
+            if (this.initialDocs && (process.env.NODE_ENV !== 'production' || !count)){
                 // if development, or if production but nothing in the database
-                await this._write_docs(this._initialDocs)
-                delete this._initialDocs
+                await this._write_docs(this.initialDocs)
+                delete this.initialDocs
             }
 
         } catch (err) {
@@ -117,12 +116,8 @@ class Collection {
             throw err
         }
     }
-    static setCollectionProps(collectionName,connectionName='default',collectionOptions,collectionIndexes){
-        // using 'this' rather than Collection because when Collection is extended 'this' refers to the new class
-        this._collectionName=collectionName
-        this._connectionName=connectionName
-        this._collectionOptions=collectionOptions
-        this._collectionIndexes=collectionIndexes
+    static setCollectionProps(){
+        const connectionName=this.connectionName
         if (UnoMongo.dbs[connectionName]) this.onConnect()
         else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
         else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
@@ -148,14 +143,14 @@ class Collection {
             idCheck[_idString] = doc
             doc._id = Mongodb.ObjectID(idString)
         })
-        if (this._initialDocs) this._initialDocs = this._initialDocs.concat(docs)
-        else if (!UnoMongo.dbs[this._connectionName]) this._initialDocs = docs
+        if (this.initialDocs) this.initialDocs = this.initialDocs.concat(docs)
+        else if (!UnoMongo.dbs[this.connectionName]) this.initialDocs = docs
         else this._write_docs(docs)
     }
     static async _write_docs(docs) {
         for await (const doc of docs) {
             try {
-                const result = await UnoMongo.dbs[this._connectionName].collection([this._collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
+                const result = await UnoMongo.dbs[this.connectionName].collection([this.collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
                 if (typeof result !== 'object' || result.length !== 1) {
                     console.error('_write_load result not ok', result, 'for', doc)
                     // don't throw errors here-  keep going

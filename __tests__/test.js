@@ -1,20 +1,24 @@
 const {UnoMongo, Collection}=require('../uno-mongo.js')
 
 class User extends Collection {
+    static collectionName='users'
+    static connectionName='default'
+    static collectionOptions
+    static collectionIndexes
     static validate(doc){
         if(doc?.name?.length > 0) return {value: doc}
         else return {error: 'doc?.name?.length>0 fails'}
     }
 }
-User.setCollectionProps('users')
+User.setCollectionProps()
 
 beforeAll(async () => {
     await UnoMongo.connect(global.__MONGO_URI__, { useUnifiedTopology: true })
 })
 
 test('User Class should be setup',()=>{
-    expect(User._collectionName).toEqual('users')
-    expect(User._connectionName).toEqual('default')
+    expect(User.collectionName).toEqual('users')
+    expect(User.connectionName).toEqual('default')
 })
 
 test('User collection can insert a doc', async ()=>{
@@ -32,6 +36,8 @@ test('collection can chain operations', async ()=>{
 test('can initialize with data in new, and validate', async ()=>{
     const doc=new User({name: 'Charles'})
     expect(doc.name).toEqual('Charles')
+    expect(doc.collectionName).toEqual(undefined)
+    expect(doc.connectionName).toEqual(undefined)
     const doc1=new User({name: 'Dick', extra: 'prop'})
     expect(doc1.extra).toEqual('prop')
 })
@@ -41,8 +47,10 @@ test('invalidation can throw an error',()=>{
 })
 
 test('can create a collection after connect', async()=>{
-    class Articles extends Collection {}
-    Articles.setCollectionProps('articles')
+    class Articles extends Collection {
+        static collectionName='articles'
+    }
+    Articles.setCollectionProps()
     await Articles.insertOne({subject: "The meaning of life"})
     const doc=await Articles.findOne({subject: {"$exists": true}})
     expect(doc.subject).toEqual("The meaning of life")
