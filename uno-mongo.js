@@ -44,64 +44,32 @@ class UnoMongo {
 module.exports.UnoMongo=UnoMongo
 
 function prototypeProperties(obj) {
-    var p = [];
+    const p = [];
     for (; obj != null; obj = Object.getPrototypeOf(obj)) {
-        var op = Object.getOwnPropertyNames(obj);
-        for (var i=0; i<op.length; i++)
-            if (p.indexOf(op[i]) == -1)
-                 p.push(op[i]);
+        const ops = Object.getOwnPropertyNames(obj);
+        for(const op of ops)
+            if (p.indexOf(op) == -1)
+                 p.push(op);
     }
-    console.info("props",p)
     return p;
 }
 
 class Collection {
     static _connectionName='default'
     static _collectionName
-    static _createOptions
-    static _indexes
+    static _collectionOptions
+    static _collectionIndexes
     static ObjectID=Mongodb.ObjectID
     static _initialDocs
 
-    static load(objs) {
-        if (this._initialDocs) this._initialDocs = this._initialDocs.concat(objs)
-        else if (!UnoMongo.dbs[this._connectionName]) this._initialDocs = objs
-        else this._write_load(objs)
-    }
-    static async _write_load(objs) {
-        if (process.env?.NODE_ENV !== 'production') {
-            let idCheck = {}
-            // convert object _id's to objects
-            objs.forEach(i => {
-                if (idCheck[i._id.$oid]) {
-                logger.error('_write_load duplicate id found. Replacing:\n', idCheck[i._id.$oid], '\nwith\n', i)
-                }
-                idCheck[i._id.$oid] = i
-                i._id = UnoMongo.ObjectID(i._id.$oid)
-            })
-            console.info('_write_load updating for development')
-            for await (const doc of objs) {
-                try {
-                const result = await UnoMongo.dbs[this._connectionName].collection([this._collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
-                if (typeof result !== 'object' || result.length !== 1) {
-                    console.error('_write_load result not ok', result, 'for', doc)
-                    // don't throw errors here-  keep going
-                }
-                } catch (err) {
-                logger.error('_write_load caught error trying to replaceOne for', err, 'doc was', doc)
-                // don't through errors here - just keep going
-                }
-            }
-        }
-    }
     static async onConnect(){
         // if there are creatOptions it must be done before db.collection(name) is ever called
         try {
-            if(this._createOptions){
+            if(this._collectionOptions){
                 const collections = await UnoMongo.dbs[this._connectionName].listCollections({ name: this._collectionName }).toArray()
                 if (!(collections && collections.length === 1)){
                     console.info('Collection.onConnect creating collection',this._collectionName)
-                    var result = await UnoMongo.dbs[this._connectionName].createCollection(this._collectionName, this._createOptions)
+                    var result = await UnoMongo.dbs[this._connectionName].createCollection(this._collectionName, this._collectionOptions)
                     if (!result) console.error('Collection.onConnect result failed')
                 }
             }
@@ -114,19 +82,22 @@ class Collection {
         const collection=UnoMongo.dbs[this._connectionName].collection(this._collectionName)
         this.collection=collection
 
-        const keys=Object.getOwnPropertyNames(Collection.prototype)
-        .concat(Object.getOwnPropertyNames(collection)) // this line has to be there or Mongo throws 
-        // TypeError: Cannot read properties of undefined (reading 'namespace')
+        const keys=prototypeProperties(collection)
 
         // this loop, plus the loop blow refering to the same error has to be there or we get
         // TypeError: User.insertOne is not a function
         for(const key of keys){
-            if(key!=='constructor')
-                Object.defineProperty(this,key,{get() {return this.collection[key]},enumerable: true, configurable: true})
+            if(key in this) continue
+            Object.defineProperty(this,key,{get() {return collection[key]},enumerable: true, configurable: true})
+            // the line below applies the collection methods to the prototype for future use of new Collection() instances
+            // but that doesn't seem so useful because you still have to pass the new doc to the method like
+            // class User extends Collection
+            // const doc=new User(); doc.insertOne(doc).  It would be clearer to says User.insertOne(doc)
+            // Object.defineProperty(this.prototype,key,{get() {return collection[key]},enumerable: true, configurable: true})
         }
         try {
-            if(this._indexes && this._indexes.length)
-            await this.collection.createIndexes(this._indexes)
+            if(this._collectionIndexes && this._collectionIndexes.length)
+            await this.collection.createIndexes(this._collectionIndexes)
         }
         catch (err) {
             console.error('createIndexes error:', err)
@@ -137,7 +108,7 @@ class Collection {
             console.info('Collection.init count', count)
             if (this._initialDocs && (process.env.NODE_ENV !== 'production' || !count)){
                 // if development, or if production but nothing in the database
-                await this._write_load(this._initialDocs)
+                await this._write_docs(this._initialDocs)
                 delete this._initialDocs
             }
 
@@ -146,24 +117,66 @@ class Collection {
             throw err
         }
     }
-    static setCollectionProps(collectionName,connectionName='default',createOptions,indexes){
+    static setCollectionProps(collectionName,connectionName='default',collectionOptions,collectionIndexes){
         // using 'this' rather than Collection because when Collection is extended 'this' refers to the new class
         this._collectionName=collectionName
         this._connectionName=connectionName
-        this._createOptions=createOptions
-        this._indexes=indexes
+        this._collectionOptions=collectionOptions
+        this._collectionIndexes=collectionIndexes
         if (UnoMongo.dbs[connectionName]) this.onConnect()
         else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
         else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
     }
-}
-
-// this loop plus the loop above with the same error message has to be there or we get:
-// TypeError: User.insertOne is not a function
-const keys=Object.getOwnPropertyNames(Mongodb.Collection.prototype)
-for(const key of keys){
-    if(key!=='constructor')
-    Object.defineProperty(Collection.prototype,key,{get() {return this.collection[key]},enumerable: true, configurable: true})
+    static preload(docs) { // this will mutate the docs so that the _id's are ObjectIDs
+        let idCheck = {}
+        // convert object _id's to objects
+        docs.forEach(doc => {
+            if(doc._id instanceof Mongodb.ObjectId) {
+                idCheck[doc._id]=doc
+                return // nothing to do here
+            }
+            if(!doc._id){
+                throw new Error("Document doesn't have an id:",doc)
+            }
+            const _idString=doc._id?.$oid||doc._id
+            if(!idString){
+                throw new Error("Document _id field doesn't look like ObjectID",doc)
+            }
+            if (idCheck[_idString]) {
+                throw new Error('_write_load duplicate id found. Replacing:\n', idCheck[_idString], '\nwith\n', doc)
+            }
+            idCheck[_idString] = doc
+            doc._id = Mongodb.ObjectID(idString)
+        })
+        if (this._initialDocs) this._initialDocs = this._initialDocs.concat(docs)
+        else if (!UnoMongo.dbs[this._connectionName]) this._initialDocs = docs
+        else this._write_docs(docs)
+    }
+    static async _write_docs(docs) {
+        for await (const doc of docs) {
+            try {
+                const result = await UnoMongo.dbs[this._connectionName].collection([this._collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
+                if (typeof result !== 'object' || result.length !== 1) {
+                    console.error('_write_load result not ok', result, 'for', doc)
+                    // don't throw errors here-  keep going
+                }
+            } catch (err) {
+                logger.error('_write_load caught error trying to replaceOne for', err, 'doc was', doc)
+                // don't through errors here - just keep going
+            }
+        }
+    }
+    constructor(doc) {
+        if(this.constructor.validate){
+            const result = this.constructor.validate(doc) || {value: doc};
+            if (result.error) {
+                throw result.error;
+            }
+            Object.assign(this, result.value);
+        }else{
+            Object.assign(this, doc)
+        }
+    }
 }
 
 /*
