@@ -6,7 +6,7 @@ class UnoMongo {
     static db
     static client
     static onConnectHandlers=[]
-    static ObjectID=Mongodb.ObjectID
+    static ObjectId=Mongodb.ObjectId
     static async connect(uri = process.env?.MONGODB_URI || 'mongodb://localhost:27017', options={}, connectionName='default'){
         if(UnoMongo.clients[connectionName]){ throw Error('connection by the name',connectionName,'already exists')}
         const client=await Mongodb.MongoClient.connect(uri,options)
@@ -43,6 +43,7 @@ class UnoMongo {
 
 module.exports.UnoMongo=UnoMongo
 
+// for the following - kudos to https://stackoverflow.com/a/30158566/6262595
 function prototypeProperties(obj) {
     const p = [];
     for (; obj != null; obj = Object.getPrototypeOf(obj)) {
@@ -58,7 +59,7 @@ class Collection {
     static connectionName='default'
     static collectionOptions
     static collectionIndexes
-    static ObjectID=Mongodb.ObjectID
+    static ObjectId=Mongodb.ObjectId
     static initialDocs
 
     static async onConnect(){
@@ -92,7 +93,7 @@ class Collection {
             // but that doesn't seem so useful because you still have to pass the new doc to the method like
             // class User extends Collection
             // const doc=new User(); doc.insertOne(doc).  It would be clearer to says User.insertOne(doc)
-            // Object.defineProperty(this.prototype,key,{get() {return collection[key]},enumerable: true, configurable: true})
+            Object.defineProperty(this.prototype,key,{get() {return collection[key]},enumerable: true, configurable: true})
         }
         try {
             if(this.collectionIndexes && this.collectionIndexes.length)
@@ -116,13 +117,15 @@ class Collection {
             throw err
         }
     }
-    static setCollectionProps(){
+    static async setCollectionProps(){
         const connectionName=this.connectionName
-        if (UnoMongo.dbs[connectionName]) this.onConnect()
+        if (UnoMongo.dbs[connectionName]) { 
+            await this.onConnect()
+        }
         else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
         else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
     }
-    static preload(docs) { // this will mutate the docs so that the _id's are ObjectIDs
+    static async preload(docs) { // this will mutate the docs so that the _id's are ObjectIds
         let idCheck = {}
         // convert object _id's to objects
         docs.forEach(doc => {
@@ -134,29 +137,31 @@ class Collection {
                 throw new Error("Document doesn't have an id:",doc)
             }
             const _idString=doc._id?.$oid||doc._id
-            if(!idString){
-                throw new Error("Document _id field doesn't look like ObjectID",doc)
+            if(!_idString){
+                throw new Error("Document _id field doesn't look like ObjectId",doc)
             }
             if (idCheck[_idString]) {
                 throw new Error('_write_load duplicate id found. Replacing:\n', idCheck[_idString], '\nwith\n', doc)
             }
             idCheck[_idString] = doc
-            doc._id = Mongodb.ObjectID(idString)
+            doc._id = new Mongodb.ObjectId(_idString)
         })
         if (this.initialDocs) this.initialDocs = this.initialDocs.concat(docs)
-        else if (!UnoMongo.dbs[this.connectionName]) this.initialDocs = docs
-        else this._write_docs(docs)
+        else if(this.collection){
+            await  this._write_docs(docs)
+        } else 
+            this.initialDocs = docs
     }
     static async _write_docs(docs) {
         for await (const doc of docs) {
             try {
-                const result = await UnoMongo.dbs[this.connectionName].collection([this.collectionName]).replaceOne({ _id: doc._id }, doc, { upsert: true })
-                if (typeof result !== 'object' || result.length !== 1) {
+                const result = await this.collection.replaceOne({ _id: doc._id }, doc, { upsert: true })
+                if (typeof result !== 'object' || !result.acknowledged || (result.modifiedCount+result.upsertedCount+result.matchedCount)<1 ) {
                     console.error('_write_load result not ok', result, 'for', doc)
                     // don't throw errors here-  keep going
                 }
             } catch (err) {
-                logger.error('_write_load caught error trying to replaceOne for', err, 'doc was', doc)
+                console.error('_write_load caught error trying to replaceOne for', err, 'doc was', doc)
                 // don't through errors here - just keep going
             }
         }
