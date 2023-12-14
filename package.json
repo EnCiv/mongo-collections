@@ -16,8 +16,8 @@
   ],
   "author": "David Fridley",
   "license": "ISC",
-  "dependencies": {
-    "mongodb": "^6.3.0"
+  "peerDependencies": {
+    "mongodb": "^5.0.0"
   },
   "optionalDependencies": {
     "@jest/globals": "^29.7.0",
