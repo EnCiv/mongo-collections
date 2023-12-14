@@ -84,8 +84,6 @@ class Collection {
 
         const keys=prototypeProperties(collection)
 
-        // this loop, plus the loop blow refering to the same error has to be there or we get
-        // TypeError: User.insertOne is not a function
         for(const key of keys){
             if(key in this) continue
             Object.defineProperty(this,key,{get() {return collection[key]},enumerable: true, configurable: true})
@@ -105,13 +103,11 @@ class Collection {
         }
         try {
             var count = await this.collection.count()
-            console.info('Collection.init count', count)
             if (this.initialDocs && (process.env.NODE_ENV !== 'production' || !count)){
                 // if development, or if production but nothing in the database
                 await this._write_docs(this.initialDocs)
                 delete this.initialDocs
             }
-
         } catch (err) {
             console.error('Collection.createIndexes error:', err)
             throw err

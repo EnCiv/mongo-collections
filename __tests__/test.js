@@ -98,6 +98,120 @@ test('can load inital doc to a collection',async()=>{
 `)
 })
 
+test('can create collections with indexes', async ()=>{
+    class Items extends Collection {
+        static collectionName='items'
+        static collectionIndexes=[
+            { key: { path: 1 }, name: 'path', unique: true, partialFilterExpression: { path: { $exists: true } } },
+            {
+            key: { parentId: 1, 'component.component': 1, _id: -1 },
+            name: 'children',
+            partialFilterExpression: { parentId: { $exists: true }, 'component.component': { $exists: true } },
+            },
+        ]
+    }
+    await Items.setCollectionProps()
+    const indexes=await Items.indexes()
+    expect(indexes).toMatchInlineSnapshot(`
+[
+  {
+    "key": {
+      "_id": 1,
+    },
+    "name": "_id_",
+    "v": 2,
+  },
+  {
+    "key": {
+      "path": 1,
+    },
+    "name": "path",
+    "partialFilterExpression": {
+      "path": {
+        "$exists": true,
+      },
+    },
+    "unique": true,
+    "v": 2,
+  },
+  {
+    "key": {
+      "_id": -1,
+      "component.component": 1,
+      "parentId": 1,
+    },
+    "name": "children",
+    "partialFilterExpression": {
+      "component.component": {
+        "$exists": true,
+      },
+      "parentId": {
+        "$exists": true,
+      },
+    },
+    "v": 2,
+  },
+]
+`)
+})
+
+test('can create a collection with a schema',async ()=>{
+    class Students extends Collection {
+        static collectionName="students"
+        static collectionOptions={
+            validator: {
+                $jsonSchema: {
+                   bsonType: "object",
+                   title: "Student Object Validation",
+                   required: [ "address", "major", "name", "year" ],
+                   properties: {
+                      name: {
+                         bsonType: "string",
+                         description: "'name' must be a string and is required"
+                      },
+                      year: {
+                         bsonType: "int",
+                         minimum: 2017,
+                         maximum: 3017,
+                         description: "'year' must be an integer in [ 2017, 3017 ] and is required"
+                      },
+                      gpa: {
+                         bsonType: "int",
+                         description: "'gpa' must be a double if the field exists"
+                      }
+                   }
+                }
+            }
+        }
+    }
+    await Students.setCollectionProps()
+    await new Promise((ok,ko)=>{
+        expect(async ()=>{
+            await Students.insertOne( {
+            name: "Alice",
+            year: 2019 ,
+            major: "History",
+            gpa: 3,
+            address: {
+               city: "NYC",
+               street: "33rd Street"
+            }
+         })
+        }).toThrow(ok())
+    })
+    const got=await Students.insertOne({
+        name: "Alice",
+        year: 2019,
+        major: "History",
+        gpa: 3,
+        address: {
+           city: "NYC",
+           street: "33rd Street"
+        }
+     })
+     expect(got.acknowledged).toEqual(true)
+})
+
 afterAll(()=>{
     UnoMongo.disconnect()
 })
