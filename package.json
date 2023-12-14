@@ -2,7 +2,7 @@
   "name": "uno-mongo",
   "version": "0.0.1",
   "description": "For one connection to the Mongo database for all modules in a project",
-  "main": "index.js",
+  "main": "uno-mongo.js",
   "scripts": {
     "dbtest": "node --inspect-brk node_modules/jest/bin/jest.js --runInBand --config ./jest-db.config.js --runTestsByPath",
     "test": "jest",
