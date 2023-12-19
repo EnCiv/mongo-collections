@@ -1,8 +1,8 @@
-const {UnoMongo, Collection}=require('../uno-mongo.js')
+const {Mongo, Collection}=require('../mongo-collections.js')
 
 class User extends Collection {
-    static collectionName='users'
     static connectionName='default'
+    static collectionName='users'
     static collectionOptions
     static collectionIndexes
     static validate(doc){
@@ -13,7 +13,7 @@ class User extends Collection {
 User.setCollectionProps()
 
 beforeAll(async () => {
-    await UnoMongo.connect(global.__MONGO_URI__, { useUnifiedTopology: true })
+    await Mongo.connect(global.__MONGO_URI__, { useUnifiedTopology: true })
 })
 
 test('User Class should be setup',()=>{
@@ -74,7 +74,7 @@ test('can load inital doc to a collection',async()=>{
         {  _id: {$oid: '657a09190323255560f77c3f'},
         type: 'apple'
       },
-      {  _id: new UnoMongo.ObjectId('657a09190323255560f77c40'),
+      {  _id: new Mongo.ObjectId('657a09190323255560f77c40'),
         type: 'pear'
     },
     ])
@@ -213,5 +213,5 @@ test('can create a collection with a schema',async ()=>{
 })
 
 afterAll(()=>{
-    UnoMongo.disconnect()
+    Mongo.disconnect()
 })

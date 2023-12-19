@@ -1,8 +1,8 @@
 {
-  "name": "uno-mongo",
+  "name": "mongo-collections",
   "version": "0.0.1",
   "description": "For one connection to the Mongo database for all modules in a project",
-  "main": "uno-mongo.js",
+  "main": "mongo-collections.js",
   "scripts": {
     "dbtest": "node --inspect-brk node_modules/jest/bin/jest.js --runInBand --config ./jest-db.config.js --runTestsByPath",
     "test": "jest",
@@ -15,7 +15,7 @@
     "connection"
   ],
   "author": "David Fridley",
-  "license": "ISC",
+  "license": "MIT",
   "peerDependencies": {
     "mongodb": "^5.0.0"
   },

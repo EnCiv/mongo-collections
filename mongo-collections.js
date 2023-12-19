@@ -1,6 +1,6 @@
 const Mongodb=require('mongodb')
 
-class UnoMongo {
+class Mongo {
     static clients=[]
     static dbs=[]
     static db
@@ -8,16 +8,16 @@ class UnoMongo {
     static onConnectHandlers=[]
     static ObjectId=Mongodb.ObjectId
     static async connect(uri = process.env?.MONGODB_URI || 'mongodb://localhost:27017', options={}, connectionName='default'){
-        if(UnoMongo.clients[connectionName]){ throw Error('connection by the name',connectionName,'already exists')}
+        if(Mongo.clients[connectionName]){ throw Error('connection by the name',connectionName,'already exists')}
         const client=await Mongodb.MongoClient.connect(uri,options)
-        UnoMongo.clients[connectionName]=client
-        UnoMongo.dbs[connectionName]=client.db()
+        Mongo.clients[connectionName]=client
+        Mongo.dbs[connectionName]=client.db()
         if(connectionName==='default'){
-            UnoMongo.client=client
-            UnoMongo.db=UnoMongo.dbs[connectionName]
+            Mongo.client=client
+            Mongo.db=Mongo.dbs[connectionName]
         }
-        if (UnoMongo.onConnectHandlers[connectionName]) {
-            for await (const handler of UnoMongo.onConnectHandlers[connectionName]) {
+        if (Mongo.onConnectHandlers[connectionName]) {
+            for await (const handler of Mongo.onConnectHandlers[connectionName]) {
                 await handler()
             }
         }
@@ -25,23 +25,24 @@ class UnoMongo {
     }
     static disconnect(connectionName){
         function disc(name){
-            if(UnoMongo.dbs[name]){
-                delete UnoMongo.dbs[name]
-                UnoMongo.clients[name].close()
+            if(Mongo.dbs[name]){
+                delete Mongo.dbs[name]
+                Mongo.clients[name].close()
                 if(name==='default'){
-                    UnoMongo.db=undefined
-                    UnoMongo.client=undefined
+                    Mongo.db=undefined
+                    Mongo.client=undefined
                 }
             }
         }
         if(!connectionName)
-            Object.keys(UnoMongo.clients).forEach(name=>disc(name))
+            Object.keys(Mongo.clients).forEach(name=>disc(name))
         else
             disc(connectionName)
     }
 }
 
-module.exports.UnoMongo=UnoMongo
+module.exports.Mongo=Mongo
+module.exports.default=Mongo
 
 // for the following - kudos to https://stackoverflow.com/a/30158566/6262595
 function prototypeProperties(obj) {
@@ -66,10 +67,10 @@ class Collection {
         // if there are creatOptions it must be done before db.collection(name) is ever called
         try {
             if(this.collectionOptions){
-                const collections = await UnoMongo.dbs[this.connectionName].listCollections({ name: this.collectionName }).toArray()
+                const collections = await Mongo.dbs[this.connectionName].listCollections({ name: this.collectionName }).toArray()
                 if (!(collections && collections.length === 1)){
                     console.info('Collection.onConnect creating collection',this.collectionName)
-                    var result = await UnoMongo.dbs[this.connectionName].createCollection(this.collectionName, this.collectionOptions)
+                    var result = await Mongo.dbs[this.connectionName].createCollection(this.collectionName, this.collectionOptions)
                     if (!result) console.error('Collection.onConnect result failed')
                 }
             }
@@ -79,7 +80,7 @@ class Collection {
             throw err
         }
         // now that the db is open, apply all the properties of the collection to the prototype for this class for they are part of new Collection
-        const collection=UnoMongo.dbs[this.connectionName].collection(this.collectionName)
+        const collection=Mongo.dbs[this.connectionName].collection(this.collectionName)
         this.collection=collection
 
         const keys=prototypeProperties(collection)
@@ -115,11 +116,11 @@ class Collection {
     }
     static async setCollectionProps(){
         const connectionName=this.connectionName
-        if (UnoMongo.dbs[connectionName]) { 
+        if (Mongo.dbs[connectionName]) { 
             await this.onConnect()
         }
-        else if (UnoMongo.onConnectHandlers[connectionName]) UnoMongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
-        else UnoMongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
+        else if (Mongo.onConnectHandlers[connectionName]) Mongo.onConnectHandlers[connectionName].push(this.onConnect.bind(this))
+        else Mongo.onConnectHandlers[connectionName] = [this.onConnect.bind(this)]
     }
     static async preload(docs) { // this will mutate the docs so that the _id's are ObjectIds
         let idCheck = {}
