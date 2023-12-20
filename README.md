@@ -1,5 +1,5 @@
 # Mongo Collections
-A declarative way to define MongoDB collections, and use them like models through out a project. And/or one connection to the database for all modules in a project. 
+A declarative way to define MongoDB collections, and use them like models throughout a project. And/or one connection to the database for all modules in a project. 
 
 Mongodb is a peer depencency, this works with 5.0 and above.
 
@@ -139,3 +139,6 @@ This library builds on mongo-models, though it is not a drop in replacement. Sig
 2. All the methods of Mongodb's Collection are available and work as defined by Mongodb
 3. The schema of mongo-models is not required but can be implemented. Alternatively you can declare the schema for Mongo in collectionOptions to use or skip it entirely.
 4. Collections are initialitezed per their declarations after Mongo connects. The can have options at the time they are created, indexes can be defined, and predefined documents can be loaded if the collection is empty.
+
+# About
+[EnCiv](https://github.com/EnCiv), Inc. is a 501(c)(3) nonprofit writing open source software for productive large scale democratic discourse. __[Volunteers](https://github.com/EnCiv/volunteers) welcome__. 
