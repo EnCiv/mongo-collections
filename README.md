@@ -17,17 +17,17 @@ class User extends Collection {
     static collectionIndexes // optional indexes array as defined in db.collection.createIndexes
     static validate(doc){} // optional function if present, is run when new User is invoked, must return {result: doc} if successful 
                          //or {error: message} if validation fails
-    static initialDocs // optional, preLoad is preferred, array of docs to write/over write into the collection. Must have _id instantiated as ObjectId. No checks are made before upserting to the database
+    static initialDocs // optional, preload is preferred, array of docs to write/over write into the collection. Must have _id instantiated as ObjectId. No checks are made before upserting to the database
 }
 
-User.preLoad(docs)  // call this with and an array of docs to write/overwrite into the collection. Must have _id, but can be:
+User.preload(docs)  // call this with and an array of docs to write/overwrite into the collection. Must have _id, but can be:
                     // {_id: '657a09190323255560f77c3e'}
                     // {_id: {$oid: '657a09190323255560f77c3e'}}
                     // {_id: {Mongodb.ObjectId('657a09190323255560f77c3e')}}
                     // thows an error if duplicate ids
                     // throws an error if no _id
                     // if possibly after Mongo.connect() is called, should:
-                    // await User.preLoad(docs)
+                    // await User.preload(docs)
                     // sets or concatenates to initialDocs
 
 User.setCollectionProps() // required for initialization if possibly after Mongo.connect is called, should: 
