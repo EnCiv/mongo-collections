@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+        mongodb-server-version: ['5.0.31', '6.0.19', '7.0.15']
+        mongodb-driver-version: ['5', '6', '7']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Install mongodb driver ${{ matrix.mongodb-driver-version }}
+        run: npm install --no-save mongodb@${{ matrix.mongodb-driver-version }}
+
+      - name: Run tests against MongoDB server ${{ matrix.mongodb-server-version }} / driver ${{ matrix.mongodb-driver-version }}
+        run: npm test
+        env:
+          MONGODB_VERSION: ${{ matrix.mongodb-server-version }}
