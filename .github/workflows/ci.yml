@@ -1,39 +1,41 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22.x, 24.x]
-        mongodb:
-          - server: '6.0.19'
-            driver: '6'
-          - server: '7.0.15'
-            driver: '7'
+    test:
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                node-version: [22.x, 24.x]
+                mongodb:
+                    - server: '5.0.15'
+                      driver: '5'
+                    - server: '6.0.19'
+                      driver: '6'
+                    - server: '7.0.15'
+                      driver: '7'
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+            - name: Use Node.js ${{ matrix.node-version }}
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node-version }}
+                  cache: 'npm'
 
-      - run: npm ci
+            - run: npm ci
 
-      - name: Install mongodb driver ${{ matrix.mongodb.driver }}
-        run: npm install --no-save mongodb@${{ matrix.mongodb.driver }}
+            - name: Install mongodb driver ${{ matrix.mongodb.driver }}
+              run: npm install --no-save mongodb@${{ matrix.mongodb.driver }}
 
-      - name: Run tests against MongoDB server ${{ matrix.mongodb.server }} / driver ${{ matrix.mongodb.driver }}
-        run: npm test
-        env:
-          MONGODB_VERSION: ${{ matrix.mongodb.server }}
+            - name: Run tests against MongoDB server ${{ matrix.mongodb.server }} / driver ${{ matrix.mongodb.driver }}
+              run: npm test
+              env:
+                  MONGODB_VERSION: ${{ matrix.mongodb.server }}
