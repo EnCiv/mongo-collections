@@ -10,11 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22.x, 24.x]
         mongodb:
-          - server: '5.0.31'
-            driver: '5'
           - server: '6.0.19'
             driver: '6'
           - server: '7.0.15'
