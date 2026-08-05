@@ -20,13 +20,10 @@
         "mongodb": "^5.0.0 || ^6.0.0 || ^7.0.0"
     },
     "devDependencies": {
-        "mongodb": "^7.0.0"
-    },
-    "optionalDependencies": {
         "@jest/globals": "^30.4.1",
         "@shelf/jest-mongodb": "^6.0.2",
         "jest": "^30.4.1",
-        "jest-enzyme": "^7.1.2"
+        "mongodb": "^7.0.0"
     },
     "repository": {
         "type": "git",
