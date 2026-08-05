@@ -11,9 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
-        mongodb-server-version: ['5.0.31', '6.0.19', '7.0.15']
-        mongodb-driver-version: ['5', '6', '7']
+        node-version: [22.x, 24.x]
+        mongodb:
+          - server: '5.0.31'
+            driver: '5'
+          - server: '6.0.19'
+            driver: '6'
+          - server: '7.0.15'
+            driver: '7'
 
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +31,10 @@ jobs:
 
       - run: npm ci
 
-      - name: Install mongodb driver ${{ matrix.mongodb-driver-version }}
-        run: npm install --no-save mongodb@${{ matrix.mongodb-driver-version }}
+      - name: Install mongodb driver ${{ matrix.mongodb.driver }}
+        run: npm install --no-save mongodb@${{ matrix.mongodb.driver }}
 
-      - name: Run tests against MongoDB server ${{ matrix.mongodb-server-version }} / driver ${{ matrix.mongodb-driver-version }}
+      - name: Run tests against MongoDB server ${{ matrix.mongodb.server }} / driver ${{ matrix.mongodb.driver }}
         run: npm test
         env:
-          MONGODB_VERSION: ${{ matrix.mongodb-server-version }}
+          MONGODB_VERSION: ${{ matrix.mongodb.server }}
