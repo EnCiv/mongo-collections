@@ -32,6 +32,13 @@ jobs:
 
             - run: npm ci
 
+            # MongoDB 5.0 requires OpenSSL 1.1, not present on Ubuntu 22+
+            - name: Install libssl1.1 for MongoDB 5.0
+              if: startsWith(matrix.mongodb.server, '5.')
+              run: |
+                  wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+                  sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+
             - name: Install mongodb driver ${{ matrix.mongodb.driver }}
               run: npm install --no-save mongodb@${{ matrix.mongodb.driver }}
 
