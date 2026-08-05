@@ -13,7 +13,7 @@ class User extends Collection {
 User.setCollectionProps()
 
 beforeAll(async () => {
-    await Mongo.connect(global.__MONGO_URI__, { useUnifiedTopology: true })
+    await Mongo.connect(global.__MONGO_URI__)
 })
 
 test('User Class should be setup', () => {

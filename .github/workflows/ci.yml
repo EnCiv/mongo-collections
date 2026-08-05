@@ -1,0 +1,48 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                node-version: [22.x, 24.x]
+                mongodb:
+                    - server: '5.0.15'
+                      driver: '5'
+                    - server: '6.0.19'
+                      driver: '6'
+                    - server: '7.0.15'
+                      driver: '7'
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Use Node.js ${{ matrix.node-version }}
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node-version }}
+                  cache: 'npm'
+
+            - run: npm ci
+
+            # MongoDB 5.0 requires OpenSSL 1.1, not present on Ubuntu 22+
+            - name: Install libssl1.1 for MongoDB 5.0
+              if: startsWith(matrix.mongodb.server, '5.')
+              run: |
+                  wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+                  sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+
+            - name: Install mongodb driver ${{ matrix.mongodb.driver }}
+              run: npm install --no-save mongodb@${{ matrix.mongodb.driver }}
+
+            - name: Run tests against MongoDB server ${{ matrix.mongodb.server }} / driver ${{ matrix.mongodb.driver }}
+              run: npm test
+              env:
+                  MONGODB_VERSION: ${{ matrix.mongodb.server }}
